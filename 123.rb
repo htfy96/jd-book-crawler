@@ -5,7 +5,7 @@ require 'sqlite3'
 def fetch(http, uri_str, limit = 10)
         # You should choose a better exception.
         puts uri_str
-        raise ArgumentError, 'too many HTTP redirects' if limit == 0
+        return '' if limit == 0
         request = Net::HTTP::Get.new URI(uri_str)
 
         response = http.request request
@@ -13,7 +13,12 @@ def fetch(http, uri_str, limit = 10)
         case response
         when Net::HTTPSuccess then
                 response.body
+        else
+            fetch(http, uri_str, limit-1)
         end
+
+        rescue Timeout::Error 
+            fetch(http, uri_str, limit-1)
 end
 
 db = SQLite3::Database.new "data.db"
@@ -21,7 +26,7 @@ STDOUT.sync = true
 cnt = 0
 db.execute("BEGIN")
 Net::HTTP.start('item.jd.com',80) do |http|
-        for i in 10006054..20000000 do
+        for i in 10006336..20000000 do
                 puts "processing "+i.to_s
                 STDOUT.flush
                 doc = Nokogiri::HTML( fetch(http, 'http://item.jd.com/'+i.to_s+ '.html') )
