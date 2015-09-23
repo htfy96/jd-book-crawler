@@ -2,6 +2,7 @@
 require 'net/http'
 require 'sqlite3'
 require 'nokogiri'
+require 'zlib'
 
 def fetch(http, uri_str, limit = 10)
         # You should choose a better exception.
@@ -28,10 +29,15 @@ db = SQLite3::Database.new "raw.db"
 db.results_as_hash = true
 STDOUT.sync = true
 cnt = 0
-start = 10000000
+start = 10000000    
 db.execute('select * from books order by id desc limit 1') do |row|
-        puts row['content'].force_encoding('utf-8')
+        begin
+                puts Zlib::Inflate.inflate(row['content'].force_encoding('utf-8'))
+        rescue
+        ensure
+        end
 end
+
 begin
         db.execute('select * from books order by id desc limit 1') do |row|
                 start = row['id'].to_s().to_i()
@@ -58,15 +64,15 @@ end
 db.execute("BEGIN")
 Net::HTTP.start('item.jd.com',80) do |http|
         for i in start..11000000 do
-                s = fetch(http, 'http://item.jd.com/'+i.to_s+ '.html')
-                doc = Nokogiri::HTML( s )
+                ss = fetch(http, 'http://item.jd.com/'+i.to_s+ '.html')
+                doc = Nokogiri::HTML( ss )
                 if /mbNav-1">图书/ =~ (doc.css('.breadcrumb').to_s.encode(Encoding::UTF_8))
                         puts "processing "+i.to_s
                         STDOUT.flush
                         begin
                                 cnt = cnt+1
-                                db.execute("insert into books (id, content) VALUES (?,?)", [i,fetch(http, 'http://item.jd.com/'+i.to_s+ '.html').to_s().force_encoding(
-                                        Encoding::GBK).encode(Encoding::UTF_8)])
+                                db.execute("insert into books (id, content) VALUES (?,?)", [i,Zlib::Deflate.deflate(ss.to_s().force_encoding(
+                                        Encoding::GBK).encode(Encoding::UTF_8))])
                                 if cnt > 20
                                         db.execute('COMMIT')
                                         db.execute('BEGIN')
