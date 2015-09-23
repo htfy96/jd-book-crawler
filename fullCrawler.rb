@@ -49,18 +49,6 @@ end
 
 
 puts "will now start from " + start.to_s()
-
-puts "Change?:"
-str = gets()
-
-if str.length > 1
-        begin
-                start = str.to_i()
-        rescue
-        ensure
-        end
-end
-
 db.execute("BEGIN")
 Net::HTTP.start('item.jd.com',80) do |http|
         for i in start..11000000 do
@@ -71,8 +59,7 @@ Net::HTTP.start('item.jd.com',80) do |http|
                         STDOUT.flush
                         begin
                                 cnt = cnt+1
-                                db.execute("insert into books (id, content) VALUES (?,?)", [i,Zlib::Deflate.deflate(ss.to_s().force_encoding(
-                                        Encoding::GBK).encode(Encoding::UTF_8))])
+                                db.execute("insert into books (id, content) VALUES (?,?)", [i,Zlib::Deflate.deflate(doc.to_s.encode(Encoding::UTF_8))])
                                 if cnt > 20
                                         db.execute('COMMIT')
                                         db.execute('BEGIN')
@@ -82,6 +69,7 @@ Net::HTTP.start('item.jd.com',80) do |http|
                                 warn("duplicate id: "+i.to_s)
                         rescue NoMethodError
                                 warn("Matching failed")
+			rescue
                         ensure
                         end
                 end
