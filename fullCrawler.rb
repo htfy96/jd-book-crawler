@@ -1,6 +1,7 @@
 #encoding: utf-8
 require 'net/http'
 require 'sqlite3'
+require 'nokogiri'
 
 def fetch(http, uri_str, limit = 10)
         # You should choose a better exception.
@@ -14,13 +15,13 @@ def fetch(http, uri_str, limit = 10)
         when Net::HTTPSuccess then
                 response.body
         else
-            fetch(http, uri_str, limit-1)
+                fetch(http, uri_str, limit-1)
         end
 
-        rescue Timeout::Error 
-            fetch(http, uri_str, limit-1)
-        rescue Zlib::BufError
-                fetch(http, uri_str, limit-1)
+rescue Timeout::Error 
+        fetch(http, uri_str, limit-1)
+rescue Zlib::BufError
+        fetch(http, uri_str, limit-1)
 end
 
 db = SQLite3::Database.new "raw.db"
@@ -35,9 +36,9 @@ begin
         db.execute('select * from books order by id desc limit 1') do |row|
                 start = row['id'].to_s().to_i()
         end
-        rescue
-                start = 10000000
-        ensure
+rescue
+        start = 10000000
+ensure
 end
 
 
@@ -57,22 +58,26 @@ end
 db.execute("BEGIN")
 Net::HTTP.start('item.jd.com',80) do |http|
         for i in start..11000000 do
-                puts "processing "+i.to_s
-                STDOUT.flush
-                begin
-                        cnt = cnt +1
-                        db.execute("insert into books (id, content) VALUES (?,?)", [i,fetch(http, 'http://item.jd.com/'+i.to_s+ '.html').to_s().force_encoding(
-                                   Encoding::GBK).encode(Encoding::UTF_8)])
-                        if cnt > 20
-                                db.execute('COMMIT')
-                                db.execute('BEGIN')
-                                cnt = 0
+                s = fetch(http, 'http://item.jd.com/'+i.to_s+ '.html')
+                doc = Nokogiri::HTML( s )
+                if /mbNav-1">图书/ =~ (doc.css('.breadcrumb').to_s.encode(Encoding::UTF_8))
+                        puts "processing "+i.to_s
+                        STDOUT.flush
+                        begin
+                                cnt = cnt+1
+                                db.execute("insert into books (id, content) VALUES (?,?)", [i,fetch(http, 'http://item.jd.com/'+i.to_s+ '.html').to_s().force_encoding(
+                                        Encoding::GBK).encode(Encoding::UTF_8)])
+                                if cnt > 20
+                                        db.execute('COMMIT')
+                                        db.execute('BEGIN')
+                                        cnt = 0
+                                end
+                        rescue SQLite3::ConstraintException
+                                warn("duplicate id: "+i.to_s)
+                        rescue NoMethodError
+                                warn("Matching failed")
+                        ensure
                         end
-                rescue SQLite3::ConstraintException
-                        warn("duplicate id: "+i.to_s)
-                rescue NoMethodError
-                        warn("Matching failed")
-                ensure
                 end
         end
         db.execute('COMMIT')
